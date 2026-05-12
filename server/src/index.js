@@ -27,6 +27,10 @@ app.use((err, _req, res, _next) => {
 });
 
 const port = Number(process.env.PORT) || 3000;
-app.listen(port, () => {
-  console.log(`yaoainote server listening on http://localhost:${port}`);
+// Bind to 0.0.0.0 explicitly — Railway / most container platforms require this.
+// Without an explicit host, Node may bind to 127.0.0.1 only, and the platform's
+// proxy can't reach us (502 Bad Gateway).
+const host = process.env.HOST || '0.0.0.0';
+app.listen(port, host, () => {
+  console.log(`yaoainote server listening on http://${host}:${port}`);
 });

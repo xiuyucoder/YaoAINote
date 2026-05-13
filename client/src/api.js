@@ -68,3 +68,75 @@ export async function ask(query) {
   });
   return asJson(res);
 }
+
+/**
+ * Stream a chat response over SSE.
+ * Calls onSources(sources[]), onText(deltaString), onDone({usage, stopReason}),
+ * onError(Error) as events arrive. Returns when the stream ends.
+ *
+ * Server sends `data: {type: "sources"|"text"|"done"|"error", ...}\n\n` events
+ * followed by a final `data: [DONE]\n\n`.
+ */
+export async function askStream(query, { onSources, onText, onDone, onError, signal } = {}) {
+  let res;
+  try {
+    res = await fetch(`${BASE}/api/chat`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', ...authHeaders() },
+      body: JSON.stringify({ query }),
+      signal,
+    });
+  } catch (err) {
+    onError?.(err);
+    return;
+  }
+
+  if (!res.ok) {
+    let msg = `${res.status} ${res.statusText}`;
+    try {
+      const body = await res.json();
+      msg = body.error || msg;
+    } catch {}
+    onError?.(new Error(msg));
+    return;
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+
+    // SSE events are separated by blank lines (\n\n).
+    let sep;
+    while ((sep = buffer.indexOf('\n\n')) !== -1) {
+      const rawEvent = buffer.slice(0, sep);
+      buffer = buffer.slice(sep + 2);
+
+      // Each event may have multiple lines; we only care about `data:` lines.
+      const dataLines = rawEvent
+        .split('\n')
+        .filter((l) => l.startsWith('data:'))
+        .map((l) => l.slice(5).trimStart());
+      if (!dataLines.length) continue;
+      const payload = dataLines.join('\n');
+
+      if (payload === '[DONE]') return;
+
+      try {
+        const evt = JSON.parse(payload);
+        switch (evt.type) {
+          case 'sources': onSources?.(evt.sources); break;
+          case 'text': onText?.(evt.text); break;
+          case 'done': onDone?.({ usage: evt.usage, stopReason: evt.stopReason }); break;
+          case 'error': onError?.(new Error(evt.message)); break;
+        }
+      } catch {
+        // Ignore malformed events.
+      }
+    }
+  }
+}

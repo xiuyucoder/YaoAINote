@@ -13,7 +13,9 @@ export async function parseToText({ buffer, originalName }) {
       return buffer.toString('utf8');
 
     case '.pdf': {
-      const { default: pdfParse } = await import('pdf-parse');
+      // Import the inner module directly — pdf-parse's index.js has a top-level
+      // debug block that reads ./test/data/*.pdf and crashes in production.
+      const { default: pdfParse } = await import('pdf-parse/lib/pdf-parse.js');
       const result = await pdfParse(buffer);
       return result.text;
     }

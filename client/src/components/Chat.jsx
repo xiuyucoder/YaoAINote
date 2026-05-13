@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ask } from '../api.js';
+import { askStream } from '../api.js';
 
 export default function Chat() {
   const [messages, setMessages] = useState([]); // {role, text, sources?}
@@ -19,17 +19,36 @@ export default function Chat() {
     const query = input.trim();
     if (!query || busy) return;
 
-    setMessages((m) => [...m, { role: 'user', text: query }]);
+    // Push the user message and an empty assistant placeholder. We mutate the
+    // placeholder as text deltas arrive.
+    setMessages((m) => [
+      ...m,
+      { role: 'user', text: query },
+      { role: 'assistant', text: '', sources: [], streaming: true },
+    ]);
     setInput('');
     setBusy(true);
     setError(null);
 
+    const updateAssistant = (mut) =>
+      setMessages((m) => {
+        const next = m.slice();
+        const last = { ...next[next.length - 1] };
+        mut(last);
+        next[next.length - 1] = last;
+        return next;
+      });
+
     try {
-      const res = await ask(query);
-      setMessages((m) => [
-        ...m,
-        { role: 'assistant', text: res.answer, sources: res.sources || [] },
-      ]);
+      await askStream(query, {
+        onSources: (sources) => updateAssistant((a) => { a.sources = sources; }),
+        onText: (delta) => updateAssistant((a) => { a.text += delta; }),
+        onDone: () => updateAssistant((a) => { a.streaming = false; }),
+        onError: (err) => {
+          setError(err.message || String(err));
+          updateAssistant((a) => { a.streaming = false; });
+        },
+      });
     } catch (err) {
       setError(err.message || String(err));
     } finally {
@@ -51,7 +70,6 @@ export default function Chat() {
         {messages.map((m, i) => (
           <Message key={i} message={m} />
         ))}
-        {busy && <div className="chat__pending">Thinking…</div>}
         {error && <div className="chat__error">{error}</div>}
       </div>
 
@@ -92,7 +110,15 @@ function Message({ message }) {
   return (
     <div className="msg msg--assistant">
       <div className="msg__bubble">
-        <div className="msg__text">{message.text}</div>
+        <div className="msg__text">
+          {message.text}
+          {message.streaming && (message.text || !message.sources?.length) && (
+            <span className="msg__cursor">▍</span>
+          )}
+          {message.streaming && !message.text && message.sources?.length > 0 && (
+            <span className="msg__pending">Thinking…</span>
+          )}
+        </div>
         {message.sources?.length > 0 && (
           <div className="msg__sources">
             {message.sources.map((s, i) => (

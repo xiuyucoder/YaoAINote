@@ -318,6 +318,19 @@ input, textarea {
 .msg__text {
   white-space: pre-wrap;
 }
+.msg__cursor {
+  display: inline-block;
+  margin-left: 1px;
+  color: var(--accent);
+  animation: blink 1s steps(2) infinite;
+}
+.msg__pending {
+  color: var(--text-muted);
+  font-style: italic;
+}
+@keyframes blink {
+  to { opacity: 0; }
+}
 .msg__sources {
   margin-top: 0.6rem;
   display: flex;

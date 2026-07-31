@@ -1,0 +1,15 @@
+#!/bin/sh
+. "$(dirname "$0")/_/husky.sh"
+
+echo "Running Copilot CLI hook..."
+
+if command -v copilot >/dev/null 2>&1; then
+  copilot "$@"
+elif command -v gh >/dev/null 2>&1 && gh help copilot >/dev/null 2>&1; then
+  # If GitHub CLI provides a copilot command, try to run it
+  gh copilot "$@"
+else
+  echo "Copilot CLI not found; skipping."
+fi
+
+echo "I am finished"

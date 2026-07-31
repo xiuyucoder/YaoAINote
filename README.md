@@ -20,9 +20,19 @@ Personal AI knowledge management system. Upload your documents, ask questions in
 
 ## API keys you'll need
 
-| Service | Where to get it |
-|---|---|
-| `ANTHROPIC_API_KEY` | https://console.anthropic.com/ |
-| `VOYAGE_API_KEY` | https://www.voyageai.com/ |
-| `PINECONE_API_KEY` | https://app.pinecone.io/ — create a serverless index named `yaoainote`, dimension `1024`, metric `cosine` |
-| `APP_API_KEY` | Make up any random string — used to authenticate the frontend to the backend |
+| Service             | Where to get it                                                                                           |
+| ------------------- | --------------------------------------------------------------------------------------------------------- |
+| `ANTHROPIC_API_KEY` | https://console.anthropic.com/                                                                            |
+| `VOYAGE_API_KEY`    | https://www.voyageai.com/                                                                                 |
+| `PINECONE_API_KEY`  | https://app.pinecone.io/ — create a serverless index named `yaoainote`, dimension `1024`, metric `cosine` |
+| `APP_API_KEY`       | Make up any random string — used to authenticate the frontend to the backend                              |
+
+## Git hooks (developer workflow)
+
+This repository uses Husky and lint-staged to run quick checks on staged files and run workspace tests before pushing.
+
+- Installation: run `npm install` at the repo root. Husky will be installed as a dev dependency and the `prepare` script will configure hooks (`husky install`).
+- Pre-commit: runs `lint-staged` to format staged files with Prettier and run lightweight checks.
+- Pre-push: runs `npm run test` in each workspace (if the workspace defines a `test` script).
+
+To bypass hooks: use `git commit --no-verify` or `git push --no-verify` when necessary.

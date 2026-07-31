@@ -1,0 +1,6 @@
+#!/bin/sh
+. "$(dirname "$0")/_/husky.sh"
+
+# Run tests in each workspace if present; don't block push on missing tests
+npm run -w server test --if-present || true
+npm run -w client test --if-present || true

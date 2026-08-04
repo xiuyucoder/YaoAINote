@@ -1,0 +1,104 @@
+{
+  "annotations": { "list": [] },
+  "editable": false,
+  "graphTooltip": 1,
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Prometheus scrape targets",
+      "description": "All configured local targets should be up. Drill into Prometheus Targets when this is not green.",
+      "id": 1,
+      "gridPos": { "h": 6, "w": 8, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [ { "color": "red", "value": null }, { "color": "green", "value": 1 } ] } }, "overrides": [] },
+      "options": { "colorMode": "background", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": [ "lastNotNull" ], "fields": "", "values": false }, "textMode": "auto" },
+      "targets": [
+        { "expr": "min(up{job=~\"prometheus|otel-collector|application-telemetry|yaoainote-server\"})", "refId": "A" }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Prometheus active series",
+      "id": 2,
+      "gridPos": { "h": 6, "w": 8, "x": 8, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short", "min": 0, "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "orange", "value": 100000 }, { "color": "red", "value": 250000 } ] } }, "overrides": [] },
+      "options": { "colorMode": "background", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": [ "lastNotNull" ], "fields": "", "values": false }, "textMode": "auto" },
+      "targets": [
+        { "expr": "prometheus_tsdb_head_series", "refId": "A" }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Collector process memory",
+      "id": 3,
+      "gridPos": { "h": 6, "w": 8, "x": 16, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "bytes", "min": 0, "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "orange", "value": 214748364 }, { "color": "red", "value": 268435456 } ] } }, "overrides": [] },
+      "options": { "colorMode": "background", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": [ "lastNotNull" ], "fields": "", "values": false }, "textMode": "auto" },
+      "targets": [
+        { "expr": "otelcol_process_memory_rss", "refId": "A" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Collector exporter queue utilization",
+      "description": "Queues are bounded at 1,000 items per configured exporter. Sustained utilization above 80% triggers an alert.",
+      "id": 4,
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1, "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 8 } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "expr": "sum by (exporter) (otelcol_exporter_queue_size) / clamp_min(sum by (exporter) (otelcol_exporter_queue_capacity), 1)", "legendFormat": "{{exporter}}", "refId": "A" },
+        { "expr": "vector(0.8)", "legendFormat": "alert threshold", "refId": "B" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Collector export failures",
+      "id": 5,
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short", "min": 0, "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 8 } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "expr": "sum by (exporter) (rate(otelcol_exporter_send_failed_spans[$__rate_interval]))", "legendFormat": "{{exporter}} spans", "refId": "A" },
+        { "expr": "sum by (exporter) (rate(otelcol_exporter_send_failed_metric_points[$__rate_interval]))", "legendFormat": "{{exporter}} metrics", "refId": "B" },
+        { "expr": "sum by (exporter) (rate(otelcol_exporter_send_failed_log_records[$__rate_interval]))", "legendFormat": "{{exporter}} logs", "refId": "C" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Prometheus active series",
+      "id": 6,
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 14 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short", "min": 0, "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 8 } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "hidden", "placement": "bottom", "showLegend": false }, "tooltip": { "mode": "single" } },
+      "targets": [
+        { "expr": "prometheus_tsdb_head_series", "legendFormat": "active series", "refId": "A" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Collector received telemetry",
+      "id": 7,
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 14 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short", "min": 0, "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 8 } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "expr": "sum by (receiver) (rate(otelcol_receiver_accepted_spans[$__rate_interval]))", "legendFormat": "{{receiver}} spans", "refId": "A" },
+        { "expr": "sum by (receiver) (rate(otelcol_receiver_accepted_metric_points[$__rate_interval]))", "legendFormat": "{{receiver}} metric points", "refId": "B" },
+        { "expr": "sum by (receiver) (rate(otelcol_receiver_accepted_log_records[$__rate_interval]))", "legendFormat": "{{receiver}} logs", "refId": "C" }
+      ]
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": [ "pipeline", "capacity", "observability" ],
+  "time": { "from": "now-6h", "to": "now" },
+  "title": "YaoAINote Observability Pipeline & Capacity",
+  "uid": "yaoainote-observability-pipeline",
+  "version": 1
+}

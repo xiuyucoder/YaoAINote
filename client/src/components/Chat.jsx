@@ -1,5 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
-import { askStream } from '../api.js';
+import { useEffect, useId, useRef, useState } from 'react';
+import {
+  askStream,
+  FEEDBACK_REASON_CODES,
+  submitAnswerFeedback,
+} from '../api.js';
 
 export default function Chat() {
   const [messages, setMessages] = useState([]); // {role, text, sources?}
@@ -24,7 +28,14 @@ export default function Chat() {
     setMessages((m) => [
       ...m,
       { role: 'user', text: query },
-      { role: 'assistant', text: '', sources: [], streaming: true },
+      {
+        role: 'assistant',
+        text: '',
+        sources: [],
+        streaming: true,
+        completed: false,
+        requestId: null,
+      },
     ]);
     setInput('');
     setBusy(true);
@@ -41,9 +52,13 @@ export default function Chat() {
 
     try {
       await askStream(query, {
+        onStarted: ({ requestId }) => updateAssistant((a) => { a.requestId = requestId; }),
         onSources: (sources) => updateAssistant((a) => { a.sources = sources; }),
         onText: (delta) => updateAssistant((a) => { a.text += delta; }),
-        onDone: () => updateAssistant((a) => { a.streaming = false; }),
+        onDone: () => updateAssistant((a) => {
+          a.completed = true;
+          a.streaming = false;
+        }),
         onError: (err) => {
           setError(err.message || String(err));
           updateAssistant((a) => { a.streaming = false; });
@@ -144,7 +159,88 @@ function Message({ message }) {
             <pre>{message.sources[openSource].text}</pre>
           </div>
         )}
+        {message.completed && message.requestId && (
+          <AnswerFeedback requestId={message.requestId} />
+        )}
       </div>
     </div>
+  );
+}
+
+const NOT_USEFUL_REASONS = [
+  { code: FEEDBACK_REASON_CODES.INCORRECT, label: 'Incorrect' },
+  { code: FEEDBACK_REASON_CODES.INCOMPLETE, label: 'Incomplete' },
+  { code: FEEDBACK_REASON_CODES.IRRELEVANT, label: 'Not relevant' },
+  { code: FEEDBACK_REASON_CODES.OTHER, label: 'Other' },
+];
+
+function AnswerFeedback({ requestId }) {
+  const reasonsId = useId();
+  const [showReasons, setShowReasons] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [result, setResult] = useState('idle');
+
+  const sendFeedback = async (reasonCode) => {
+    if (sending) return;
+    setSending(true);
+    setResult('idle');
+    try {
+      await submitAnswerFeedback(requestId, reasonCode);
+      setResult('sent');
+    } catch {
+      setResult('error');
+    } finally {
+      setSending(false);
+    }
+  };
+
+  if (result === 'sent') {
+    return <p className="feedback__status" role="status">Thanks for your feedback.</p>;
+  }
+
+  return (
+    <section className="feedback" aria-label="Answer feedback">
+      <p className="feedback__prompt">Was this answer useful?</p>
+      <div className="feedback__actions">
+        <button
+          type="button"
+          className="feedback__button"
+          disabled={sending}
+          onClick={() => sendFeedback(FEEDBACK_REASON_CODES.USEFUL)}
+        >
+          Useful
+        </button>
+        <button
+          type="button"
+          className="feedback__button"
+          aria-expanded={showReasons}
+          aria-controls={reasonsId}
+          disabled={sending}
+          onClick={() => setShowReasons((shown) => !shown)}
+        >
+          Not useful
+        </button>
+      </div>
+      {showReasons && (
+        <fieldset id={reasonsId} className="feedback__reasons" disabled={sending}>
+          <legend>What could be improved?</legend>
+          {NOT_USEFUL_REASONS.map(({ code, label }) => (
+            <button
+              key={code}
+              type="button"
+              className="feedback__reason"
+              onClick={() => sendFeedback(code)}
+            >
+              {label}
+            </button>
+          ))}
+        </fieldset>
+      )}
+      {result === 'error' && (
+        <p className="feedback__error" role="alert">
+          Feedback could not be saved. Please try again.
+        </p>
+      )}
+    </section>
   );
 }

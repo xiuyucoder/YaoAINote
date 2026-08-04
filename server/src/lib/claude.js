@@ -5,7 +5,11 @@ let _client = null;
 export function getClient() {
   if (_client) return _client;
   const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) throw new Error('ANTHROPIC_API_KEY is not set');
+  if (!apiKey) {
+    throw Object.assign(new Error('ANTHROPIC_API_KEY is not set'), {
+      telemetryError: { type: 'ConfigurationError', code: 'ANTHROPIC_API_KEY_MISSING' },
+    });
+  }
   // The SDK reads ANTHROPIC_BASE_URL automatically when set in the environment,
   // so a UIUIAPI / other-relay user just sets that env var and this code is unchanged.
   _client = new Anthropic({ apiKey });

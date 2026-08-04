@@ -7,7 +7,13 @@
  *
  * Defaults: ~500 tokens per chunk, ~50 token overlap.
  */
-export function chunkText(text, { chunkSize = 500, overlap = 50 } = {}) {
+export const CHUNK_TARGET_TOKENS = 500;
+export const CHUNK_OVERLAP_TOKENS = 50;
+
+export function chunkText(
+  text,
+  { chunkSize = CHUNK_TARGET_TOKENS, overlap = CHUNK_OVERLAP_TOKENS } = {},
+) {
   // Approximate words per chunk — 1 token ≈ 0.75 words for English prose.
   const wordsPerChunk = Math.round(chunkSize * 0.75);
   const overlapWords = Math.round(overlap * 0.75);

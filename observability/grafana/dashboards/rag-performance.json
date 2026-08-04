@@ -1,0 +1,98 @@
+{
+  "annotations": { "list": [] },
+  "editable": false,
+  "graphTooltip": 1,
+  "panels": [
+    {
+      "type": "text",
+      "title": "TTFT coverage",
+      "id": 1,
+      "gridPos": { "h": 4, "w": 24, "x": 0, "y": 0 },
+      "options": {
+        "mode": "markdown",
+        "content": "### Time to first token\\nThe approved metric contract currently has no TTFT observation. This dashboard intentionally does **not** estimate TTFT from full stream duration. Use stream-duration and SSE delivery panels below until a bounded `yaoainote.gen_ai.stream.ttft` histogram is added to the contract and instrumentation."
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "RAG chat latency p95 and p99",
+      "id": 2,
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "ms", "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 8 } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "expr": "histogram_quantile(0.95, sum by (le) (rate(yaoainote_rag_chat_duration_bucket[$__rate_interval])))", "legendFormat": "p95", "refId": "A" },
+        { "expr": "histogram_quantile(0.99, sum by (le) (rate(yaoainote_rag_chat_duration_bucket[$__rate_interval])))", "legendFormat": "p99", "refId": "B" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "LLM stream duration p95 by outcome",
+      "id": 3,
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "ms", "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 8 } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "expr": "histogram_quantile(0.95, sum by (le, outcome) (rate(yaoainote_gen_ai_stream_duration_bucket[$__rate_interval])))", "legendFormat": "{{outcome}}", "refId": "A" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Provider dependency-error rate",
+      "id": 4,
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1, "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 8 } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "expr": "sum(rate(yaoainote_embeddings_duration_count{outcome=\"dependency_error\"}[$__rate_interval])) / clamp_min(sum(rate(yaoainote_embeddings_duration_count[$__rate_interval])), 0.001)", "legendFormat": "embeddings", "refId": "A" },
+        { "expr": "sum(rate(yaoainote_vector_db_duration_count{outcome=\"dependency_error\"}[$__rate_interval])) / clamp_min(sum(rate(yaoainote_vector_db_duration_count[$__rate_interval])), 0.001)", "legendFormat": "vector DB", "refId": "B" },
+        { "expr": "sum(rate(yaoainote_gen_ai_stream_duration_count{outcome=\"dependency_error\"}[$__rate_interval])) / clamp_min(sum(rate(yaoainote_gen_ai_stream_duration_count[$__rate_interval])), 0.001)", "legendFormat": "LLM stream", "refId": "C" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "RAG operation rate by outcome",
+      "id": 5,
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "ops", "custom": { "drawStyle": "bars", "fillOpacity": 50 } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "expr": "sum by (outcome) (rate(yaoainote_rag_chat_duration_count[$__rate_interval]))", "legendFormat": "{{outcome}}", "refId": "A" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Generated tokens per second",
+      "id": 6,
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 20 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short", "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 8 } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "expr": "sum by (token_type) (rate(yaoainote_gen_ai_tokens_total[$__rate_interval]))", "legendFormat": "{{token_type}}", "refId": "A" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "SSE delivery events by outcome",
+      "id": 7,
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 20 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "ops", "custom": { "drawStyle": "bars", "fillOpacity": 50 } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "expr": "sum by (event_type, outcome) (rate(yaoainote_sse_events_total[$__rate_interval]))", "legendFormat": "{{event_type}} / {{outcome}}", "refId": "A" }
+      ]
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": [ "rag", "provider", "latency", "observability" ],
+  "time": { "from": "now-6h", "to": "now" },
+  "title": "YaoAINote RAG Performance",
+  "uid": "yaoainote-rag-performance",
+  "version": 1
+}

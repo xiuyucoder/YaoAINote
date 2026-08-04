@@ -1,0 +1,4 @@
+- targets:
+    - host.docker.internal:3001
+  labels:
+    service: yaoainote

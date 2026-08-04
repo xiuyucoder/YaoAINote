@@ -380,6 +380,64 @@ input, textarea {
   line-height: 1.45;
 }
 
+/* ===== Answer feedback ===== */
+.feedback {
+  margin-top: 0.75rem;
+  padding-top: 0.65rem;
+  border-top: 1px solid var(--border);
+}
+.feedback__prompt {
+  margin: 0 0 0.4rem;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+.feedback__actions, .feedback__reasons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+.feedback__button, .feedback__reason {
+  padding: 0.25rem 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+.feedback__button:hover, .feedback__reason:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.feedback__button:focus-visible, .feedback__reason:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.feedback__button:disabled, .feedback__reason:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+.feedback__reasons {
+  margin: 0.55rem 0 0;
+  padding: 0;
+  border: 0;
+}
+.feedback__reasons legend {
+  width: 100%;
+  margin-bottom: 0.35rem;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+.feedback__status, .feedback__error {
+  margin: 0.75rem 0 0;
+  font-size: 0.8rem;
+}
+.feedback__status {
+  color: var(--text-muted);
+}
+.feedback__error {
+  color: var(--error);
+}
+
 .chat__input {
   display: flex;
   gap: 0.5rem;

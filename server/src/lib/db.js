@@ -2,6 +2,7 @@ import Database from 'better-sqlite3';
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { instrumentStage } from './observability.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -42,14 +43,36 @@ const getStmt = db.prepare(
 
 const deleteStmt = db.prepare(`DELETE FROM documents WHERE id = ?`);
 
-export function insertDocument(doc) {
-  insertStmt.run({
-    id: doc.id,
-    name: doc.name,
-    size_bytes: doc.sizeBytes,
-    chunk_count: doc.chunkCount,
-    created_at: doc.createdAt,
-  });
+export async function insertDocument(doc) {
+  return instrumentStage(
+    {
+      name: 'metadata.insert',
+      event: 'metadata.insert',
+      message: 'SQLite document insert completed',
+      errorCode: 'SQLITE_METADATA_INSERT_FAILED',
+      attributes: {
+        'db.system': 'sqlite',
+        'db.operation': 'insert',
+        'document.size_bytes': doc.sizeBytes,
+        'document.chunk_count': doc.chunkCount,
+      },
+    },
+    async (stage) => {
+      try {
+        const result = insertStmt.run({
+          id: doc.id,
+          name: doc.name,
+          size_bytes: doc.sizeBytes,
+          chunk_count: doc.chunkCount,
+          created_at: doc.createdAt,
+        });
+        stage.setAttribute('db.rows_affected', result.changes);
+      } catch (error) {
+        error.telemetryError ||= { type: 'DatabaseError', code: 'SQLITE_METADATA_INSERT_FAILED' };
+        throw error;
+      }
+    },
+  );
 }
 
 export function listDocuments() {
@@ -60,6 +83,26 @@ export function getDocument(id) {
   return getStmt.get(id);
 }
 
-export function deleteDocument(id) {
-  deleteStmt.run(id);
+export async function deleteDocument(id) {
+  return instrumentStage(
+    {
+      name: 'metadata.delete',
+      event: 'metadata.delete',
+      message: 'SQLite document delete completed',
+      errorCode: 'SQLITE_METADATA_DELETE_FAILED',
+      attributes: {
+        'db.system': 'sqlite',
+        'db.operation': 'delete',
+      },
+    },
+    async (stage) => {
+      try {
+        const result = deleteStmt.run(id);
+        stage.setAttribute('db.rows_affected', result.changes);
+      } catch (error) {
+        error.telemetryError ||= { type: 'DatabaseError', code: 'SQLITE_METADATA_DELETE_FAILED' };
+        throw error;
+      }
+    },
+  );
 }

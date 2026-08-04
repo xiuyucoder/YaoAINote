@@ -1,4 +1,5 @@
 import { deleteDocument } from '../api.js';
+import { endUiOperation, failureTelemetry, startUiOperation } from '../observability.js';
 
 function formatBytes(n) {
   if (n < 1024) return `${n} B`;
@@ -20,10 +21,13 @@ export default function DocumentList({ documents, onDeleted }) {
 
   const handleDelete = async (id) => {
     if (!confirm('Delete this document and all its embeddings?')) return;
+    const deletion = startUiOperation('ui.documents.delete', 'delete');
     try {
-      await deleteDocument(id);
+      await deleteDocument(id, { parentOperation: deletion });
+      endUiOperation(deletion, { outcome: 'success' });
       onDeleted?.(id);
     } catch (err) {
+      endUiOperation(deletion, failureTelemetry(err));
       alert(`Delete failed: ${err.message}`);
     }
   };

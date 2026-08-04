@@ -1,0 +1,25 @@
+global:
+  resolve_timeout: 5m
+
+route:
+  receiver: local-discard
+  group_by:
+    - alertname
+    - service
+    - component
+    - severity
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  routes:
+    - receiver: local-discard
+      matchers:
+        - service="yaoainote"
+        - team="platform"
+
+receivers:
+  # Production deployments replace this receiver through a secret-managed
+  # Alertmanager configuration. The matching labels above are emitted by every
+  # Prometheus rule, so paging destinations can be routed by service,
+  # component, severity, and team without adding high-cardinality metadata.
+  - name: local-discard

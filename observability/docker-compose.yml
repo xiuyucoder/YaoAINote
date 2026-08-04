@@ -1,0 +1,96 @@
+name: yaoainote-observability
+
+services:
+  grafana:
+    image: grafana/grafana:11.5.2
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?Set GRAFANA_ADMIN_PASSWORD in observability/.env}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
+      - loki
+      - tempo
+
+  prometheus:
+    image: prom/prometheus:v3.2.1
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=30d
+      - --web.enable-lifecycle
+    ports:
+      - "9090:9090"
+    volumes:
+      - prometheus-data:/prometheus
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/rules:/etc/prometheus/rules:ro
+      - ./prometheus/targets:/etc/prometheus/targets:ro
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    depends_on:
+      - alertmanager
+      - otel-collector
+
+  loki:
+    image: grafana/loki:3.4.2
+    restart: unless-stopped
+    command: -config.file=/etc/loki/config.yml
+    ports:
+      - "3100:3100"
+    volumes:
+      - loki-data:/loki
+      - ./loki/config.yml:/etc/loki/config.yml:ro
+
+  tempo:
+    image: grafana/tempo:2.7.1
+    restart: unless-stopped
+    command: -config.file=/etc/tempo/config.yml
+    ports:
+      - "3200:3200"
+    volumes:
+      - tempo-data:/var/tempo
+      - ./tempo/config.yml:/etc/tempo/config.yml:ro
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.119.0
+    restart: unless-stopped
+    command:
+      - --config=/etc/otelcol-contrib/config.yml
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+    volumes:
+      - ./otel-collector/config.yml:/etc/otelcol-contrib/config.yml:ro
+    depends_on:
+      - loki
+      - tempo
+
+  alertmanager:
+    image: prom/alertmanager:v0.28.0
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/alertmanager/alertmanager.yml
+      - --storage.path=/alertmanager
+    ports:
+      - "9093:9093"
+    volumes:
+      - alertmanager-data:/alertmanager
+      - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+
+volumes:
+  grafana-data:
+  prometheus-data:
+  loki-data:
+  tempo-data:
+  alertmanager-data:

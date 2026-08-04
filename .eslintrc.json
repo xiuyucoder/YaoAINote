@@ -1,0 +1,26 @@
+{
+  "root": true,
+  "env": {
+    "es2021": true
+  },
+  "overrides": [
+    {
+      "files": ["server/**/*.js"],
+      "env": { "node": true, "es2021": true },
+      "rules": {}
+    },
+    {
+      "files": ["client/**/*.js", "client/**/*.jsx"],
+      "env": { "browser": true, "es2021": true },
+      "plugins": ["react", "react-hooks"],
+      "extends": [
+        "eslint:recommended",
+        "plugin:react/recommended",
+        "plugin:react-hooks/recommended",
+        "prettier"
+      ],
+      "settings": { "react": { "version": "detect" } },
+      "rules": {}
+    }
+  ]
+}

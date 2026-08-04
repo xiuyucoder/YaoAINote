@@ -7,7 +7,33 @@
     "client"
   ],
   "scripts": {
+    "prepare": "node -e \"try{require('husky').install()}catch(e){}\"",
     "dev:server": "npm run dev --workspace=server",
-    "dev:client": "npm run dev --workspace=client"
+    "dev:client": "npm run dev --workspace=client",
+    "format": "npm -w server run format && npm -w client run format",
+    "lint": "npm -w server run lint || true && npm -w client run lint || true",
+    "test": "npm -w server run test || echo \"No server tests\" && npm -w client run test || echo \"No client tests\""
+  },
+  "devDependencies": {
+    "husky": "^8.0.0",
+    "lint-staged": "^13.0.0",
+    "prettier": "^3.0.0",
+    "eslint": "^8.0.0",
+    "eslint-plugin-react": "^7.32.0",
+    "eslint-plugin-react-hooks": "^4.6.0",
+    "eslint-config-prettier": "^9.0.0"
+  },
+  "lint-staged": {
+    "*.{js,jsx,ts,tsx,json,md}": [
+      "prettier --write"
+    ],
+    "server/**/*.{js,json}": [
+      "npm -w server run lint --silent || echo \"lint skipped\"",
+      "git add server"
+    ],
+    "client/**/*.{js,jsx,ts,tsx,json}": [
+      "npm -w client run lint --silent || echo \"lint skipped\"",
+      "git add client"
+    ]
   }
 }

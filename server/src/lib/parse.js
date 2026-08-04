@@ -29,7 +29,10 @@ export async function parseToText({ buffer, originalName }) {
     default:
       throw Object.assign(
         new Error(`unsupported file type: ${ext || '(none)'}. supported: .txt, .md, .pdf, .docx`),
-        { status: 400 },
+        {
+          status: 400,
+          telemetryError: { type: 'ValidationError', code: 'UNSUPPORTED_FILE_TYPE' },
+        },
       );
   }
 }

@@ -1,0 +1,279 @@
+groups:
+  - name: yaoainote-api-slo
+    rules:
+      - alert: ApiAvailabilityFastBurn
+        expr: |
+          (
+            sum(rate(yaoainote_http_server_requests_total{outcome=~"server_error|dependency_error"}[5m]))
+            /
+            clamp_min(sum(rate(yaoainote_http_server_requests_total[5m])), 0.001)
+          ) > 0.144
+          and sum(rate(yaoainote_http_server_requests_total[5m])) > 0.1
+        for: 5m
+        labels:
+          severity: critical
+          service: yaoainote
+          component: api
+          team: platform
+        annotations:
+          summary: API availability is burning the 99% SLO budget rapidly
+          description: More than 14.4% of API requests have failed due to service or dependency errors for five minutes while traffic is present.
+          runbook: docs/observability.md
+      - alert: ApiLatencySloViolation
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le) (
+              rate(yaoainote_http_server_duration_bucket{route!="/metrics"}[10m])
+            )
+          ) > 2000
+          and sum(rate(yaoainote_http_server_requests_total{route!="/metrics"}[10m])) > 0.1
+        for: 15m
+        labels:
+          severity: warning
+          service: yaoainote
+          component: api
+          team: platform
+        annotations:
+          summary: API p95 latency exceeds the 2 second objective
+          description: HTTP server p95 latency has exceeded 2 seconds for 15 minutes.
+          runbook: docs/observability.md
+
+  - name: yaoainote-rag
+    rules:
+      - alert: RagDependencyFailureRateHigh
+        expr: |
+          (
+            sum(rate(yaoainote_rag_chat_duration_count{outcome="dependency_error"}[10m]))
+            /
+            clamp_min(sum(rate(yaoainote_rag_chat_duration_count[10m])), 0.001)
+          ) > 0.10
+          and sum(rate(yaoainote_rag_chat_duration_count[10m])) > 0.02
+        for: 10m
+        labels:
+          severity: critical
+          service: yaoainote
+          component: rag
+          team: platform
+        annotations:
+          summary: RAG dependency failures exceed 10%
+          description: More than 10% of completed RAG chat operations are failing due to a dependency.
+          runbook: docs/observability.md
+      - alert: RAGStreamLatencyHigh
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le) (
+              rate(yaoainote_gen_ai_stream_duration_bucket{outcome="success"}[15m])
+            )
+          ) > 30000
+          and sum(rate(yaoainote_gen_ai_stream_duration_count[15m])) > 0.02
+        for: 15m
+        labels:
+          severity: warning
+          service: yaoainote
+          component: rag
+          team: platform
+        annotations:
+          summary: RAG stream p95 duration exceeds 30 seconds
+          description: Successful provider stream duration is above 30 seconds at p95 for 15 minutes.
+          runbook: docs/observability.md
+      - alert: VectorProviderErrorRateHigh
+        expr: |
+          (
+            sum by (operation) (
+              rate(yaoainote_vector_db_duration_count{outcome="dependency_error"}[10m])
+            )
+            /
+            clamp_min(
+              sum by (operation) (rate(yaoainote_vector_db_duration_count[10m])),
+              0.001
+            )
+          ) > 0.10
+          and sum by (operation) (rate(yaoainote_vector_db_duration_count[10m])) > 0.02
+        for: 10m
+        labels:
+          severity: critical
+          service: yaoainote
+          component: rag
+          team: platform
+        annotations:
+          summary: Pinecone {{ $labels.operation }} dependency errors exceed 10%
+          description: Vector database {{ $labels.operation }} operations have a dependency-error rate above 10%.
+          runbook: docs/observability.md
+      - alert: EmbeddingProviderErrorRateHigh
+        expr: |
+          (
+            sum by (input_type) (
+              rate(yaoainote_embeddings_duration_count{outcome="dependency_error"}[10m])
+            )
+            /
+            clamp_min(
+              sum by (input_type) (rate(yaoainote_embeddings_duration_count[10m])),
+              0.001
+            )
+          ) > 0.10
+          and sum by (input_type) (rate(yaoainote_embeddings_duration_count[10m])) > 0.02
+        for: 10m
+        labels:
+          severity: critical
+          service: yaoainote
+          component: rag
+          team: platform
+        annotations:
+          summary: Embedding provider {{ $labels.input_type }} errors exceed 10%
+          description: Embedding {{ $labels.input_type }} operations have a dependency-error rate above 10%.
+          runbook: docs/observability.md
+      - alert: LlmProviderErrorRateHigh
+        expr: |
+          (
+            sum by (model) (
+              rate(yaoainote_gen_ai_stream_duration_count{outcome="dependency_error"}[10m])
+            )
+            /
+            clamp_min(
+              sum by (model) (rate(yaoainote_gen_ai_stream_duration_count[10m])),
+              0.001
+            )
+          ) > 0.10
+          and sum by (model) (rate(yaoainote_gen_ai_stream_duration_count[10m])) > 0.02
+        for: 10m
+        labels:
+          severity: critical
+          service: yaoainote
+          component: rag
+          team: platform
+        annotations:
+          summary: LLM provider {{ $labels.model }} errors exceed 10%
+          description: LLM stream operations have a dependency-error rate above 10%.
+          runbook: docs/observability.md
+
+  - name: yaoainote-ingestion-and-search
+    rules:
+      - alert: UploadFailureRateHigh
+        expr: |
+          (
+            sum(rate(yaoainote_documents_operations_total{operation="upload",outcome=~"server_error|dependency_error"}[15m]))
+            /
+            clamp_min(sum(rate(yaoainote_documents_operations_total{operation="upload"}[15m])), 0.001)
+          ) > 0.20
+          and sum(rate(yaoainote_documents_operations_total{operation="upload"}[15m])) > 0.02
+        for: 15m
+        labels:
+          severity: warning
+          service: yaoainote
+          component: ingestion
+          team: platform
+        annotations:
+          summary: Upload failures exceed 20%
+          description: Document uploads are failing at more than 20% for 15 minutes.
+          runbook: docs/observability.md
+      - alert: UploadParsingLatencyHigh
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le) (
+              rate(yaoainote_documents_parse_duration_bucket{outcome="success"}[15m])
+            )
+          ) > 30000
+          and sum(rate(yaoainote_documents_parse_duration_count[15m])) > 0.02
+        for: 15m
+        labels:
+          severity: warning
+          service: yaoainote
+          component: ingestion
+          team: platform
+        annotations:
+          summary: Upload parsing p95 latency exceeds 30 seconds
+          description: Successful document parsing has exceeded 30 seconds at p95 for 15 minutes.
+          runbook: docs/observability.md
+      - alert: SearchNoContextRateHigh
+        expr: |
+          (
+            sum(rate(yaoainote_rag_chat_duration_count{outcome="success",no_context="true"}[30m]))
+            /
+            clamp_min(sum(rate(yaoainote_rag_chat_duration_count{outcome="success"}[30m])), 0.001)
+          ) > 0.25
+          and sum(rate(yaoainote_rag_chat_duration_count{outcome="success"}[30m])) > 0.02
+        for: 30m
+        labels:
+          severity: warning
+          service: yaoainote
+          component: search-quality
+          team: platform
+        annotations:
+          summary: More than 25% of successful RAG requests have no context
+          description: The no-context rate indicates search coverage or retrieval quality degradation.
+          runbook: docs/observability.md
+
+  - name: yaoainote-observability-pipeline
+    rules:
+      - alert: OtelCollectorUnavailable
+        expr: up{job="otel-collector"} == 0
+        for: 5m
+        labels:
+          severity: critical
+          service: yaoainote
+          component: observability
+          team: platform
+        annotations:
+          summary: OpenTelemetry Collector is unavailable
+          description: Prometheus cannot scrape the OpenTelemetry Collector for five minutes.
+          runbook: docs/observability.md
+      - alert: TelemetryMetricEndpointUnavailable
+        expr: up{job="application-telemetry"} == 0
+        for: 5m
+        labels:
+          severity: critical
+          service: yaoainote
+          component: observability
+          team: platform
+        annotations:
+          summary: Telemetry metrics endpoint is unavailable
+          description: Prometheus cannot scrape the Collector's application telemetry endpoint for five minutes.
+          runbook: docs/observability.md
+      - alert: ServerMetricsEndpointUnavailable
+        expr: up{job="yaoainote-server"} == 0
+        for: 5m
+        labels:
+          severity: warning
+          service: yaoainote
+          component: observability
+          team: platform
+        annotations:
+          summary: Server metrics endpoint is unavailable
+          description: Prometheus cannot scrape the YaoAINote server metrics endpoint for five minutes.
+          runbook: docs/observability.md
+      - alert: TelemetryExporterQueueHigh
+        expr: |
+          sum by (exporter) (otelcol_exporter_queue_size)
+          /
+          clamp_min(sum by (exporter) (otelcol_exporter_queue_capacity), 1)
+          > 0.80
+        for: 10m
+        labels:
+          severity: warning
+          service: yaoainote
+          component: observability
+          team: platform
+        annotations:
+          summary: Telemetry exporter queue is above 80%
+          description: The {{ $labels.exporter }} Collector exporter queue has been above 80% capacity for 10 minutes.
+          runbook: https://github.com/${GITHUB_REPOSITORY:-owner/repo}/blob/main/docs/observability.md
+      - alert: TelemetryExportFailures
+        expr: |
+          sum by (exporter) (
+            rate(otelcol_exporter_send_failed_spans[10m])
+            or rate(otelcol_exporter_send_failed_metric_points[10m])
+            or rate(otelcol_exporter_send_failed_log_records[10m])
+          ) > 0
+        for: 10m
+        labels:
+          severity: warning
+          service: yaoainote
+          component: observability
+          team: platform
+        annotations:
+          summary: Collector exporter is dropping telemetry
+          description: The {{ $labels.exporter }} Collector exporter has failed to send telemetry for 10 minutes.
+          runbook: https://github.com/${GITHUB_REPOSITORY:-owner/repo}/blob/main/docs/observability.md

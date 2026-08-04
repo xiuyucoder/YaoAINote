@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://yaoainote.local/schemas/retrieval-results-1.0.json",
+  "title": "YaoAINote retrieval evaluation record",
+  "description": "One newline-delimited, content-free retrieval relevance judgment. Identifiers must be opaque, non-user-derived IDs.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "case_id",
+    "relevant_result_ids",
+    "retrieved_results"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "case_id": {
+      "$ref": "#/$defs/opaqueId"
+    },
+    "relevant_result_ids": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/opaqueId"
+      }
+    },
+    "retrieved_results": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "result_id",
+          "rank"
+        ],
+        "properties": {
+          "result_id": {
+            "$ref": "#/$defs/opaqueId"
+          },
+          "rank": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100000
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "opaqueId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+    }
+  }
+}

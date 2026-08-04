@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import { uploadDocument } from '../api.js';
+import { endUiOperation, failureTelemetry, startUiOperation } from '../observability.js';
 
 const ACCEPTED = '.txt,.md,.pdf,.docx';
 
@@ -11,15 +12,21 @@ export default function Uploader({ onUploaded }) {
 
   const handleFiles = async (files) => {
     if (!files || !files.length) return;
+    const upload = startUiOperation('ui.documents.upload', 'upload', {
+      'upload.file_count': files.length,
+      'upload.total_bytes': Array.from(files).reduce((total, file) => total + file.size, 0),
+    });
     setError(null);
     setBusy(true);
     try {
       // Upload sequentially — keeps Voyage rate limits sane and makes UI status easy.
       for (const file of files) {
-        const doc = await uploadDocument(file);
+        const doc = await uploadDocument(file, { parentOperation: upload });
         onUploaded?.(doc);
       }
+      endUiOperation(upload, { outcome: 'success' });
     } catch (err) {
+      endUiOperation(upload, failureTelemetry(err));
       setError(err.message || String(err));
     } finally {
       setBusy(false);

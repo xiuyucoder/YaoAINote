@@ -1,0 +1,2 @@
+{"schema_version":"1.0","case_id":"case-placeholder-001","relevant_result_ids":["result-placeholder-alpha","result-placeholder-beta"],"retrieved_results":[{"result_id":"result-placeholder-beta","rank":1},{"result_id":"result-placeholder-distractor","rank":2}]}
+{"schema_version":"1.0","case_id":"case-placeholder-002","relevant_result_ids":["result-placeholder-gamma"],"retrieved_results":[{"result_id":"result-placeholder-distractor","rank":1},{"result_id":"result-placeholder-gamma","rank":2}]}

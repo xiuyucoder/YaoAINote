@@ -8,7 +8,7 @@ import {
 } from '@opentelemetry/api';
 import { OTLPMetricExporter } from '@opentelemetry/exporter-metrics-otlp-http';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
-import { Resource } from '@opentelemetry/resources';
+import { resourceFromAttributes } from '@opentelemetry/resources';
 import { MeterProvider, PeriodicExportingMetricReader } from '@opentelemetry/sdk-metrics';
 import {
   BatchSpanProcessor,
@@ -19,7 +19,13 @@ import { WebTracerProvider } from '@opentelemetry/sdk-trace-web';
 
 const SERVICE_NAME = 'yaoainote-client';
 const DEFAULT_SAMPLE_RATIO = 0.1;
-const UI_RESULTS = new Set(['success', 'client_error', 'server_error', 'cancelled', 'dependency_error']);
+const UI_RESULTS = new Set([
+  'success',
+  'client_error',
+  'server_error',
+  'cancelled',
+  'dependency_error',
+]);
 
 const telemetry = {
   enabled: false,
@@ -55,9 +61,9 @@ function signalEndpoint(baseEndpoint, configuredEndpoint, signal) {
 function setAttributes(span, attributes) {
   for (const [key, value] of Object.entries(attributes)) {
     if (
-      typeof value === 'string'
-      || typeof value === 'boolean'
-      || (typeof value === 'number' && Number.isFinite(value))
+      typeof value === 'string' ||
+      typeof value === 'boolean' ||
+      (typeof value === 'number' && Number.isFinite(value))
     ) {
       span.setAttribute(key, value);
     }
@@ -127,7 +133,10 @@ function observeWebVitals() {
 
   observe('event', (entries) => {
     for (const entry of entries) {
-      if (entry.interactionId && (!maxInteractionLatency || entry.duration > maxInteractionLatency)) {
+      if (
+        entry.interactionId &&
+        (!maxInteractionLatency || entry.duration > maxInteractionLatency)
+      ) {
         maxInteractionLatency = entry.duration;
       }
     }
@@ -161,12 +170,12 @@ export function initializeTelemetry() {
   const tracesEndpoint = signalEndpoint(
     baseEndpoint,
     import.meta.env.VITE_OTEL_EXPORTER_OTLP_TRACES_ENDPOINT,
-    'traces',
+    'traces'
   );
   const metricsEndpoint = signalEndpoint(
     baseEndpoint,
     import.meta.env.VITE_OTEL_EXPORTER_OTLP_METRICS_ENDPOINT,
-    'metrics',
+    'metrics'
   );
 
   if (import.meta.env.VITE_TELEMETRY_ENABLED === 'false' || !tracesEndpoint || !metricsEndpoint) {
@@ -174,7 +183,7 @@ export function initializeTelemetry() {
   }
 
   try {
-    const resource = new Resource({
+    const resource = new resourceFromAttributes({
       'service.name': SERVICE_NAME,
       'service.version': import.meta.env.VITE_APP_VERSION || '0.1.0',
       'deployment.environment': import.meta.env.VITE_DEPLOYMENT_ENVIRONMENT || import.meta.env.MODE,
@@ -186,7 +195,7 @@ export function initializeTelemetry() {
       }),
     });
     traceProvider.addSpanProcessor(
-      new BatchSpanProcessor(new OTLPTraceExporter({ url: tracesEndpoint })),
+      new BatchSpanProcessor(new OTLPTraceExporter({ url: tracesEndpoint }))
     );
     traceProvider.register();
 
@@ -220,9 +229,7 @@ export function initializeTelemetry() {
 
 export function startSpan(name, attributes = {}, parentOperation, kind = SpanKind.INTERNAL) {
   const parentSpan = operationSpan(parentOperation);
-  const parentContext = parentSpan
-    ? trace.setSpan(context.active(), parentSpan)
-    : context.active();
+  const parentContext = parentSpan ? trace.setSpan(context.active(), parentSpan) : context.active();
   const span = telemetry.tracer.startSpan(name, { kind }, parentContext);
   setAttributes(span, attributes);
   return { span, startedAt: now(), ended: false };
@@ -247,12 +254,10 @@ export function startUiOperation(name, operation, attributes = {}, parentOperati
   };
 }
 
-export function endUiOperation(operation, {
-  attributes = {},
-  errorType,
-  outcome = 'success',
-  statusCode,
-} = {}) {
+export function endUiOperation(
+  operation,
+  { attributes = {}, errorType, outcome = 'success', statusCode } = {}
+) {
   if (!operation || operation.ended) return;
 
   const safeOutcome = normalizedOutcome(outcome);
@@ -273,20 +278,21 @@ export function endUiOperation(operation, {
 
 export function startClientRequest(route, method, parentOperation) {
   return {
-    ...startSpan('http.client.request', {
-      'http.request.method': method,
-      'http.route': route,
-    }, parentOperation, SpanKind.CLIENT),
+    ...startSpan(
+      'http.client.request',
+      {
+        'http.request.method': method,
+        'http.route': route,
+      },
+      parentOperation,
+      SpanKind.CLIENT
+    ),
     method,
     route,
   };
 }
 
-export function endClientRequest(request, {
-  errorType,
-  outcome = 'success',
-  statusCode,
-} = {}) {
+export function endClientRequest(request, { errorType, outcome = 'success', statusCode } = {}) {
   if (!request || request.ended) return;
 
   const safeOutcome = normalizedOutcome(outcome);

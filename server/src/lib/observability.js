@@ -11,7 +11,7 @@ import {
 } from '@opentelemetry/api';
 import { PrometheusExporter } from '@opentelemetry/exporter-prometheus';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-proto';
-import { Resource } from '@opentelemetry/resources';
+import { resourceFromAttributes } from '@opentelemetry/resources';
 import { NodeSDK } from '@opentelemetry/sdk-node';
 import { AlwaysOnSampler } from '@opentelemetry/sdk-trace-base';
 
@@ -27,7 +27,7 @@ let prometheusExporter;
 
 function configuredSampleRatio() {
   const ratio = Number(
-    process.env.TELEMETRY_TRACE_SAMPLE_RATIO ?? process.env.OTEL_TRACE_SAMPLE_RATIO ?? 0.1,
+    process.env.TELEMETRY_TRACE_SAMPLE_RATIO ?? process.env.OTEL_TRACE_SAMPLE_RATIO ?? 0.1
   );
   return Number.isFinite(ratio) ? Math.max(0, Math.min(1, ratio)) : 0.1;
 }
@@ -60,11 +60,12 @@ class TailSamplingSpanProcessor {
     this.traces.delete(traceId);
     const rootAttributes = span.attributes;
     const isHealthCheck = rootAttributes['http.route'] === '/api/health';
-    const traceHasError = spans.some((candidate) =>
-      candidate.status.code === SpanStatusCode.ERROR ||
-      candidate.attributes['auth.result'] === 'rejected' ||
-      candidate.attributes['auth.result'] === 'misconfigured' ||
-      candidate.attributes['error.type'] === 'DependencyError',
+    const traceHasError = spans.some(
+      (candidate) =>
+        candidate.status.code === SpanStatusCode.ERROR ||
+        candidate.attributes['auth.result'] === 'rejected' ||
+        candidate.attributes['auth.result'] === 'misconfigured' ||
+        candidate.attributes['error.type'] === 'DependencyError'
     );
     const isCancelled = rootAttributes['rag.cancelled'] === true;
     const duration = span.duration[0] * 1000 + span.duration[1] / 1e6;
@@ -89,7 +90,7 @@ class TailSamplingSpanProcessor {
   }
 }
 
-const resource = new Resource({
+const resource = resourceFromAttributes({
   'service.name': SERVICE_NAME,
   'service.version': SERVICE_VERSION,
   'deployment.environment': DEPLOYMENT_ENVIRONMENT,
@@ -117,7 +118,7 @@ if (telemetryEnabled) {
       new OTLPTraceExporter({
         url: endpoint.endsWith('/v1/traces') ? endpoint : `${endpoint}/v1/traces`,
       }),
-      configuredSampleRatio(),
+      configuredSampleRatio()
     );
   }
 }
@@ -204,15 +205,13 @@ function redact(value) {
           ? removeUndefined({ type: child.type, code: child.code })
           : redact(child),
       ])
-      .filter(([, child]) => child !== undefined),
+      .filter(([, child]) => child !== undefined)
   );
 }
 
 function currentTraceFields() {
   const spanContext = trace.getSpan(context.active())?.spanContext();
-  return spanContext?.traceId
-    ? { trace_id: spanContext.traceId, span_id: spanContext.spanId }
-    : {};
+  return spanContext?.traceId ? { trace_id: spanContext.traceId, span_id: spanContext.spanId } : {};
 }
 
 function currentRequest() {
@@ -223,23 +222,25 @@ function requestLogFields() {
   const request = currentRequest();
   return request
     ? removeUndefined({
-      request_id: request.id,
-      route: request.route,
-      method: request.method,
-    })
+        request_id: request.id,
+        route: request.route,
+        method: request.method,
+      })
     : {};
 }
 
 export function log(level, fields) {
-  const record = redact(removeUndefined({
-    timestamp: new Date().toISOString(),
-    level,
-    service: SERVICE_NAME,
-    environment: DEPLOYMENT_ENVIRONMENT,
-    ...requestLogFields(),
-    ...currentTraceFields(),
-    ...fields,
-  }));
+  const record = redact(
+    removeUndefined({
+      timestamp: new Date().toISOString(),
+      level,
+      service: SERVICE_NAME,
+      environment: DEPLOYMENT_ENVIRONMENT,
+      ...requestLogFields(),
+      ...currentTraceFields(),
+      ...fields,
+    })
+  );
 
   process.stdout.write(`${JSON.stringify(record)}\n`);
 }
@@ -366,7 +367,7 @@ export async function instrumentStage(config, work) {
       } finally {
         span.end();
       }
-    },
+    }
   );
 }
 
@@ -381,7 +382,7 @@ export function startStage(config) {
   const span = tracer.startSpan(
     config.name,
     { kind: config.kind || SpanKind.INTERNAL, attributes: removeUndefined(summary) },
-    parentContext,
+    parentContext
   );
   const stageContext = trace.setSpan(parentContext, span);
   let ended = false;
@@ -491,7 +492,7 @@ export function requestTelemetry(req, res, next) {
         'http.request.body.size': Number.isFinite(contentLength) ? contentLength : undefined,
       }),
     },
-    extracted,
+    extracted
   );
 
   const request = {
@@ -530,7 +531,10 @@ export function requestTelemetry(req, res, next) {
         if (outcome === 'cancelled') {
           request.span.setAttribute('rag.cancelled', true);
         } else if (statusCode >= 400 && !request.error) {
-          request.span.setAttribute('error.type', statusCode >= 500 ? 'ServerError' : 'ValidationError');
+          request.span.setAttribute(
+            'error.type',
+            statusCode >= 500 ? 'ServerError' : 'ValidationError'
+          );
           request.span.setStatus({ code: SpanStatusCode.ERROR });
         }
 
@@ -576,12 +580,17 @@ export function downstreamHeaders() {
 }
 
 export function safeFileExtension(name) {
-  const extension = String(name || '').split('.').pop()?.toLowerCase();
+  const extension = String(name || '')
+    .split('.')
+    .pop()
+    ?.toLowerCase();
   return ['txt', 'md', 'pdf', 'docx'].includes(extension) ? extension : 'other';
 }
 
 export function safeMimeFamily(mimeType) {
-  const family = String(mimeType || '').split('/')[0].toLowerCase();
+  const family = String(mimeType || '')
+    .split('/')[0]
+    .toLowerCase();
   return ['application', 'text'].includes(family) ? family : 'other';
 }
 

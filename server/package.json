@@ -8,7 +8,9 @@
     "start": "node src/index.js",
     "format": "prettier --write \"src/**/*.{js,json,md}\"",
     "lint": "eslint \"src/**/*.js\" --max-warnings=0 || echo \"lint skipped\" && prettier --check \"src/**/*.{js,json,md}\" || echo \"prettier skipped\"",
-    "test": "echo \"No tests\" && exit 0"
+    "test": "node --test",
+    "test:llm-live": "node --test test/llm-live.test.js",
+    "test:chat-api-live": "node --test test/chat-api-live.test.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.65.0",

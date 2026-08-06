@@ -1,9 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import {
-  askStream,
-  FEEDBACK_REASON_CODES,
-  submitAnswerFeedback,
-} from '../api.js';
+import { ask, FEEDBACK_REASON_CODES, submitAnswerFeedback } from '../api.js';
 
 export default function Chat() {
   const [messages, setMessages] = useState([]); // {role, text, sources?}
@@ -23,8 +19,6 @@ export default function Chat() {
     const query = input.trim();
     if (!query || busy) return;
 
-    // Push the user message and an empty assistant placeholder. We mutate the
-    // placeholder as text deltas arrive.
     setMessages((m) => [
       ...m,
       { role: 'user', text: query },
@@ -51,21 +45,19 @@ export default function Chat() {
       });
 
     try {
-      await askStream(query, {
-        onStarted: ({ requestId }) => updateAssistant((a) => { a.requestId = requestId; }),
-        onSources: (sources) => updateAssistant((a) => { a.sources = sources; }),
-        onText: (delta) => updateAssistant((a) => { a.text += delta; }),
-        onDone: () => updateAssistant((a) => {
-          a.completed = true;
-          a.streaming = false;
-        }),
-        onError: (err) => {
-          setError(err.message || String(err));
-          updateAssistant((a) => { a.streaming = false; });
-        },
+      const response = await ask(query);
+      updateAssistant((a) => {
+        a.requestId = response.requestId;
+        a.sources = response.sources || [];
+        a.text = response.answer || '';
+        a.completed = true;
+        a.streaming = false;
       });
     } catch (err) {
       setError(err.message || String(err));
+      updateAssistant((a) => {
+        a.streaming = false;
+      });
     } finally {
       setBusy(false);
     }
@@ -159,9 +151,7 @@ function Message({ message }) {
             <pre>{message.sources[openSource].text}</pre>
           </div>
         )}
-        {message.completed && message.requestId && (
-          <AnswerFeedback requestId={message.requestId} />
-        )}
+        {message.completed && message.requestId && <AnswerFeedback requestId={message.requestId} />}
       </div>
     </div>
   );
@@ -195,7 +185,11 @@ function AnswerFeedback({ requestId }) {
   };
 
   if (result === 'sent') {
-    return <p className="feedback__status" role="status">Thanks for your feedback.</p>;
+    return (
+      <p className="feedback__status" role="status">
+        Thanks for your feedback.
+      </p>
+    );
   }
 
   return (

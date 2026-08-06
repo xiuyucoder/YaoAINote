@@ -2,21 +2,24 @@ import Anthropic from '@anthropic-ai/sdk';
 
 let _client = null;
 
-export function getClient() {
-  if (_client) return _client;
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+export function createClient({ apiKey = process.env.ANTHROPIC_API_KEY } = {}) {
   if (!apiKey) {
     throw Object.assign(new Error('ANTHROPIC_API_KEY is not set'), {
       telemetryError: { type: 'ConfigurationError', code: 'ANTHROPIC_API_KEY_MISSING' },
     });
   }
+  return new Anthropic({ apiKey });
+}
+
+export function getClient() {
+  if (_client) return _client;
   // The SDK reads ANTHROPIC_BASE_URL automatically when set in the environment,
   // so a UIUIAPI / other-relay user just sets that env var and this code is unchanged.
-  _client = new Anthropic({ apiKey });
+  _client = createClient();
   return _client;
 }
 
-export const MODEL = 'claude-sonnet-4-6';
+export const MODEL = 'claude-haiku-4-5-20251001';
 
 export const SYSTEM_PROMPT = `You are a personal knowledge assistant. The user has uploaded their own documents to a private knowledge base. Answer the user's question using only the information in the <context> section below.
 
@@ -48,8 +51,6 @@ Question: ${query}`;
   return {
     model: MODEL,
     max_tokens: 16000,
-    thinking: { type: 'adaptive' },
-    output_config: { effort: 'high' },
     system: SYSTEM_PROMPT,
     messages: [{ role: 'user', content: userMessage }],
   };

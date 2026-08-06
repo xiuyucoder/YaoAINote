@@ -253,11 +253,11 @@ export function errorInfo(error, fallbackCode = 'INTERNAL_ERROR') {
   if (error?.code === 'LIMIT_FILE_SIZE') {
     return { type: 'ValidationError', code: 'UPLOAD_TOO_LARGE' };
   }
-  if (Number(error?.status) >= 400 && Number(error?.status) < 500) {
-    return { type: 'ValidationError', code: fallbackCode };
-  }
   if (/^(PINECONE|VOYAGE|ANTHROPIC)_/.test(fallbackCode)) {
     return { type: 'DependencyError', code: fallbackCode };
+  }
+  if (Number(error?.status) >= 400 && Number(error?.status) < 500) {
+    return { type: 'ValidationError', code: fallbackCode };
   }
   if (fallbackCode.startsWith('SQLITE_')) {
     return { type: 'DatabaseError', code: fallbackCode };

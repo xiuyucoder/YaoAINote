@@ -57,9 +57,7 @@ function statusOutcome(status) {
 
 function requestOutcome(error, status) {
   if (error?.name === 'AbortError') return 'cancelled';
-  return Number.isInteger(status) && status >= 400
-    ? statusOutcome(status)
-    : 'dependency_error';
+  return Number.isInteger(status) && status >= 400 ? statusOutcome(status) : 'dependency_error';
 }
 
 function requestErrorType(outcome, error) {
@@ -85,7 +83,7 @@ async function asJson(response) {
       detail = await response.text().catch(() => '');
     }
     const error = new Error(
-      `${response.status} ${response.statusText}${detail ? ` — ${detail}` : ''}`,
+      `${response.status} ${response.statusText}${detail ? ` — ${detail}` : ''}`
     );
     error.status = response.status;
     throw error;
@@ -130,7 +128,7 @@ export async function listDocuments({ parentOperation } = {}) {
     '/api/documents',
     `${BASE}/api/documents`,
     { headers: authHeaders() },
-    parentOperation,
+    parentOperation
   );
   return json.documents;
 }
@@ -146,7 +144,7 @@ export async function uploadDocument(file, { parentOperation } = {}) {
       headers: authHeaders(), // The browser adds the multipart boundary.
       body: form,
     },
-    parentOperation,
+    parentOperation
   );
 }
 
@@ -158,7 +156,7 @@ export async function deleteDocument(id, { parentOperation } = {}) {
       method: 'DELETE',
       headers: authHeaders(),
     },
-    parentOperation,
+    parentOperation
   );
 }
 
@@ -167,26 +165,35 @@ export async function ask(query) {
     'rag.query_chars': query.length,
     'rag.requested_top_k': CHAT_TOP_K,
   });
+  const request = startClientRequest('/api/chat', 'POST', submit);
+  let statusCode;
 
   try {
-    const json = await fetchJson(
-      '/api/chat',
-      `${BASE}/api/chat`,
-      {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', ...authHeaders() },
-        body: JSON.stringify({ query }),
+    const url = `${BASE}/api/chat`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        ...authHeaders(),
+        ...traceHeaders(request, url),
       },
-      submit,
-    );
-    endUiOperation(submit, { outcome: 'success' });
-    return json;
+      body: JSON.stringify({ query }),
+    });
+    statusCode = response.status;
+    if (!response.ok) await asJson(response);
+
+    const json = await response.json();
+    endClientRequest(request, { outcome: 'success', statusCode });
+    endUiOperation(submit, { outcome: 'success', statusCode });
+    return { ...json, requestId: responseRequestId(response) };
   } catch (error) {
-    const outcome = requestOutcome(error, error.status);
+    const outcome = requestOutcome(error, statusCode);
+    const errorType = requestErrorType(outcome, error);
+    endClientRequest(request, { errorType, outcome, statusCode });
     endUiOperation(submit, {
-      errorType: requestErrorType(outcome, error),
+      errorType,
       outcome,
-      statusCode: error.status,
+      statusCode,
     });
     throw error;
   }
@@ -198,7 +205,7 @@ export async function ask(query) {
  */
 export async function askStream(
   query,
-  { onStarted, onSources, onText, onDone, onError, signal } = {},
+  { onStarted, onSources, onText, onDone, onError, signal } = {}
 ) {
   const submit = startUiOperation('ui.chat.submit', 'ask', {
     'rag.query_chars': query.length,
@@ -365,7 +372,7 @@ export async function submitAnswerFeedback(requestId, reasonCode) {
         headers: { 'content-type': 'application/json', ...authHeaders() },
         body: JSON.stringify({ requestId, reasonCode }),
       },
-      feedback,
+      feedback
     );
     endUiOperation(feedback, { outcome: 'success' });
   } catch (error) {

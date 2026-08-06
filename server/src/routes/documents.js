@@ -30,7 +30,19 @@ const upload = multer({
 
 function runMiddleware(middleware, req, res) {
   return new Promise((resolve, reject) => {
-    middleware(req, res, (error) => (error ? reject(error) : resolve()));
+    middleware(req, res, (error) => {
+      if (error?.code === 'LIMIT_FILE_SIZE') {
+        reject(
+          createHttpError(413, 'uploaded file exceeds the 50 MB limit', {
+            type: 'ValidationError',
+            code: 'UPLOAD_TOO_LARGE',
+          })
+        );
+        return;
+      }
+      if (error) reject(error);
+      else resolve();
+    });
   });
 }
 
@@ -50,7 +62,7 @@ router.get('/', async (req, res, next) => {
         const documents = listDocuments();
         stage.setAttribute('documents.count', documents.length);
         res.json({ documents });
-      },
+      }
     );
   } catch (error) {
     next(error);
@@ -77,7 +89,7 @@ router.post('/', async (req, res, next) => {
           recordUploadBytes(
             summary['upload.bytes'] || 0,
             summary['upload.file_extension'] || 'other',
-            outcome,
+            outcome
           );
         },
       },
@@ -85,11 +97,10 @@ router.post('/', async (req, res, next) => {
         try {
           await runMiddleware(upload.single('file'), req, res);
           if (!req.file) {
-            throw createHttpError(
-              400,
-              'no file uploaded (form field "file")',
-              { type: 'ValidationError', code: 'UPLOAD_FILE_MISSING' },
-            );
+            throw createHttpError(400, 'no file uploaded (form field "file")', {
+              type: 'ValidationError',
+              code: 'UPLOAD_FILE_MISSING',
+            });
           }
 
           const { buffer, originalname: name, size, mimetype } = req.file;
@@ -111,7 +122,8 @@ router.post('/', async (req, res, next) => {
                 'document.file_extension': fileExtension,
                 'upload.bytes': size,
               },
-              onComplete: ({ duration, outcome }) => recordParseDuration(duration, fileExtension, outcome),
+              onComplete: ({ duration, outcome }) =>
+                recordParseDuration(duration, fileExtension, outcome),
             },
             async (parseStage) => {
               try {
@@ -126,15 +138,14 @@ router.post('/', async (req, res, next) => {
                 parseStage.setAttribute('parser.result', 'error');
                 throw error;
               }
-            },
+            }
           );
           uploadStage.setAttribute('document.text_chars', text.length);
           if (!text.trim()) {
-            throw createHttpError(
-              400,
-              'document parsed to empty text',
-              { type: 'ValidationError', code: 'DOCUMENT_EMPTY' },
-            );
+            throw createHttpError(400, 'document parsed to empty text', {
+              type: 'ValidationError',
+              code: 'DOCUMENT_EMPTY',
+            });
           }
 
           const chunks = await instrumentStage(
@@ -166,15 +177,14 @@ router.post('/', async (req, res, next) => {
                 'chunk.mean_chars': lengths.length ? Math.round(totalChars / lengths.length) : 0,
               });
               return produced;
-            },
+            }
           );
           uploadStage.setAttribute('document.chunk_count', chunks.length);
           if (!chunks.length) {
-            throw createHttpError(
-              400,
-              'no chunks produced from document',
-              { type: 'ValidationError', code: 'DOCUMENT_CHUNKS_EMPTY' },
-            );
+            throw createHttpError(400, 'no chunks produced from document', {
+              type: 'ValidationError',
+              code: 'DOCUMENT_CHUNKS_EMPTY',
+            });
           }
 
           const embeddings = await embedDocuments(chunks);
@@ -202,7 +212,7 @@ router.post('/', async (req, res, next) => {
           uploadStage.setAttribute('documents.result', 'error');
           throw error;
         }
-      },
+      }
     );
   } catch (err) {
     next(err);
@@ -227,11 +237,10 @@ router.delete('/:id', async (req, res, next) => {
         try {
           const doc = getDocument(req.params.id);
           if (!doc) {
-            throw createHttpError(
-              404,
-              'document not found',
-              { type: 'ValidationError', code: 'DOCUMENT_NOT_FOUND' },
-            );
+            throw createHttpError(404, 'document not found', {
+              type: 'ValidationError',
+              code: 'DOCUMENT_NOT_FOUND',
+            });
           }
 
           deleteStage.setAttribute('document.chunk_count', doc.chunkCount);
@@ -243,7 +252,7 @@ router.delete('/:id', async (req, res, next) => {
           deleteStage.setAttribute('documents.result', 'error');
           throw error;
         }
-      },
+      }
     );
   } catch (err) {
     next(err);

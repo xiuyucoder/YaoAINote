@@ -81,5 +81,9 @@ The probe reads `APP_API_KEY` from `server/.env`. To target a different local po
 a separate key, set `CHAT_API_BASE_URL` (restricted to `localhost`, `127.0.0.1`, or `::1`)
 and `CHAT_API_KEY` before running it.
 
+`/api/chat` returns JSON by default. Set `LLM_STREAMING_ENABLED=true` and restart the
+server to return SSE events instead. When testing that mode, also set
+`CHAT_API_EXPECT_STREAMING=true` before running the local chat API probe.
+
 For PowerShell API calls, trace correlation, live probes, and troubleshooting,
 see [the API debugging guide](docs/api-debugging.md).

@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import { ask, FEEDBACK_REASON_CODES, submitAnswerFeedback } from '../api.js';
+import { askStream, FEEDBACK_REASON_CODES, submitAnswerFeedback } from '../api.js';
 
 export default function Chat() {
   const [messages, setMessages] = useState([]); // {role, text, sources?}
@@ -45,13 +45,28 @@ export default function Chat() {
       });
 
     try {
-      const response = await ask(query);
-      updateAssistant((a) => {
-        a.requestId = response.requestId;
-        a.sources = response.sources || [];
-        a.text = response.answer || '';
-        a.completed = true;
-        a.streaming = false;
+      await askStream(query, {
+        onStarted: ({ requestId }) => {
+          updateAssistant((a) => {
+            a.requestId = requestId;
+          });
+        },
+        onSources: (sources) => {
+          updateAssistant((a) => {
+            a.sources = sources || [];
+          });
+        },
+        onText: (text) => {
+          updateAssistant((a) => {
+            a.text += text || '';
+          });
+        },
+        onDone: () => {
+          updateAssistant((a) => {
+            a.completed = true;
+            a.streaming = false;
+          });
+        },
       });
     } catch (err) {
       setError(err.message || String(err));

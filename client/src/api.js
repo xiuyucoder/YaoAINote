@@ -161,42 +161,29 @@ export async function deleteDocument(id, { parentOperation } = {}) {
 }
 
 export async function ask(query) {
-  const submit = startUiOperation('ui.chat.submit', 'ask', {
-    'rag.query_chars': query.length,
-    'rag.requested_top_k': CHAT_TOP_K,
+  let answer = '';
+  let sources = [];
+  let usage = null;
+  let stopReason = 'unknown';
+  let requestId = null;
+
+  await askStream(query, {
+    onStarted: (started) => {
+      requestId = started.requestId;
+    },
+    onSources: (receivedSources) => {
+      sources = receivedSources || [];
+    },
+    onText: (text) => {
+      answer += text || '';
+    },
+    onDone: (completed) => {
+      usage = completed.usage;
+      stopReason = completed.stopReason;
+    },
   });
-  const request = startClientRequest('/api/chat', 'POST', submit);
-  let statusCode;
 
-  try {
-    const url = `${BASE}/api/chat`;
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        ...authHeaders(),
-        ...traceHeaders(request, url),
-      },
-      body: JSON.stringify({ query }),
-    });
-    statusCode = response.status;
-    if (!response.ok) await asJson(response);
-
-    const json = await response.json();
-    endClientRequest(request, { outcome: 'success', statusCode });
-    endUiOperation(submit, { outcome: 'success', statusCode });
-    return { ...json, requestId: responseRequestId(response) };
-  } catch (error) {
-    const outcome = requestOutcome(error, statusCode);
-    const errorType = requestErrorType(outcome, error);
-    endClientRequest(request, { errorType, outcome, statusCode });
-    endUiOperation(submit, {
-      errorType,
-      outcome,
-      statusCode,
-    });
-    throw error;
-  }
+  return { answer, sources, usage, stopReason, requestId };
 }
 
 /**
@@ -240,10 +227,28 @@ export async function askStream(
     if (!response.ok) await asJson(response);
 
     endSpan(connect);
+    onStarted?.({ requestId: responseRequestId(response) });
+
+    const contentType = response.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) {
+      const json = await response.json();
+      onSources?.(json.sources || []);
+      if (json.answer) onText?.(json.answer);
+      onDone?.({ usage: json.usage, stopReason: json.stopReason });
+      endClientRequest(request, { outcome: 'success', statusCode });
+      endUiOperation(submit, { outcome: 'success', statusCode });
+      return;
+    }
+
+    if (!contentType.includes('text/event-stream')) {
+      const error = new Error(`Unsupported chat response type: ${contentType || 'unknown'}.`);
+      error.telemetryType = 'UnsupportedChatResponse';
+      throw error;
+    }
+
     stream = startSpan('ui.chat.stream', {}, request);
     sourcesPhase = startSpan('ui.chat.stream.sources', { 'sse.phase': 'sources' }, stream);
     firstTextPhase = startSpan('ui.chat.stream.first_text', { 'sse.phase': 'first_text' }, stream);
-    onStarted?.({ requestId: responseRequestId(response) });
 
     if (!response.body) {
       const error = new Error('Streaming response is unavailable.');
@@ -351,6 +356,7 @@ export async function askStream(
     endClientRequest(request, { errorType, outcome, statusCode });
     endUiOperation(submit, { errorType, outcome, statusCode });
     onError?.(error);
+    throw error;
   }
 }
 

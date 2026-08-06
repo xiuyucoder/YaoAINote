@@ -3,6 +3,7 @@ import { embedQuery } from '../lib/embed.js';
 import { queryByVector } from '../lib/pinecone.js';
 import { getClient, buildAnswerParams, NO_CONTEXT_FALLBACK, MODEL } from '../lib/claude.js';
 import { providerFailureAttributes } from '../lib/llm-diagnostics.js';
+import { beginSse, endSse, isLlmStreamingEnabled, writeSseEvent } from '../lib/chat-streaming.js';
 import {
   annotateRoute,
   createHttpError,
@@ -12,6 +13,7 @@ import {
   markRequestError,
   recordRag,
   recordRetrievedChunks,
+  recordSseEvent,
   recordStream,
   recordTokens,
 } from '../lib/observability.js';
@@ -54,6 +56,12 @@ function clientErrorMessage(error) {
     return error.message || 'Invalid chat request.';
   }
   return 'Chat request failed. Check the server logs using the request ID.';
+}
+
+function emitSse(res, event) {
+  const emitted = writeSseEvent(res, event);
+  if (emitted) recordSseEvent(event.type, 'success');
+  return emitted;
 }
 
 router.post('/feedback', async (req, res, next) => {
@@ -100,6 +108,7 @@ router.post('/feedback', async (req, res, next) => {
 
 router.post('/', async (req, res) => {
   annotateRoute(req, '/api/chat');
+  const streaming = isLlmStreamingEnabled();
   const query = typeof req.body?.query === 'string' ? req.body.query.trim() : '';
   const queryChars = query.length;
   const requestedTopK = Number(req.body?.topK);
@@ -167,12 +176,20 @@ router.post('/', async (req, res) => {
             'rag.no_context': true,
             'gen_ai.response.stop_reason': stopReason,
           });
-          res.json({
-            answer: NO_CONTEXT_FALLBACK,
-            sources,
-            usage: null,
-            stopReason,
-          });
+          if (streaming) {
+            beginSse(res);
+            emitSse(res, { type: 'sources', sources });
+            emitSse(res, { type: 'text', text: NO_CONTEXT_FALLBACK });
+            emitSse(res, { type: 'done', usage: null, stopReason });
+            endSse(res);
+          } else {
+            res.json({
+              answer: NO_CONTEXT_FALLBACK,
+              sources,
+              usage: null,
+              stopReason,
+            });
+          }
           return;
         }
 
@@ -199,6 +216,11 @@ router.post('/', async (req, res) => {
             return built;
           }
         );
+
+        if (streaming) {
+          beginSse(res);
+          emitSse(res, { type: 'sources', sources });
+        }
 
         const final = await instrumentStage(
           {
@@ -243,6 +265,9 @@ router.post('/', async (req, res) => {
                   answer += event.delta.text;
                   textBytes += Buffer.byteLength(event.delta.text);
                   textDeltaCount += 1;
+                  if (streaming) {
+                    emitSse(res, { type: 'text', text: event.delta.text });
+                  }
                 }
               }
 
@@ -289,18 +314,31 @@ router.post('/', async (req, res) => {
         }
 
         ragStage.setAttribute('gen_ai.response.stop_reason', stopReason);
-        res.json({
-          answer: final.answer,
-          sources,
-          usage: final.completed.usage,
-          stopReason,
-        });
+        if (streaming) {
+          emitSse(res, { type: 'done', usage: final.completed.usage, stopReason });
+          endSse(res);
+        } else {
+          res.json({
+            answer: final.answer,
+            sources,
+            usage: final.completed.usage,
+            stopReason,
+          });
+        }
       }
     );
   } catch (error) {
     markRequestError(req, error, 'RAG_CHAT_FAILED');
-    if (!res.headersSent)
+    if (streaming && res.headersSent && !res.writableEnded && !res.destroyed) {
+      emitSse(res, {
+        type: 'error',
+        message: 'Chat stream failed. Check the server logs using the request ID.',
+      });
+      emitSse(res, { type: 'done', usage: null, stopReason: 'error' });
+      endSse(res);
+    } else if (!res.headersSent) {
       res.status(error.status || 500).json({ error: clientErrorMessage(error) });
+    }
   }
 });
 

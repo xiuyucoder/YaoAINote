@@ -44,6 +44,18 @@ npm --workspace=server start 2>&1 |
 
 `server-chat-trace.log` is a local debugging artifact. Do not commit it.
 
+### Select the chat response mode
+
+`/api/chat` returns JSON by default. To enable Server-Sent Events (SSE), set
+the following before starting the server:
+
+```powershell
+$env:LLM_STREAMING_ENABLED = 'true'
+```
+
+Set it to `false` or unset it to restore the JSON response. Restart the server
+after changing the setting.
+
 ## Check server availability
 
 The health endpoint does not require an API key:
@@ -88,6 +100,26 @@ is capped at `20`.
 
 The response is JSON with `answer`, `sources`, `usage`, and `stopReason`.
 `sources` can be empty when no indexed document chunks match the query.
+
+When `LLM_STREAMING_ENABLED=true`, use `Invoke-WebRequest` to inspect the raw
+SSE frames instead:
+
+```powershell
+$apiKey = '<value of APP_API_KEY in server/.env>'
+
+(Invoke-WebRequest `
+  -Uri 'http://localhost:3001/api/chat' `
+  -Method Post `
+  -Headers @{ 'x-api-key' = $apiKey } `
+  -ContentType 'application/json' `
+  -Body (@{ query = '请总结已上传文档的核心内容'; topK = 1 } | ConvertTo-Json)
+).Content
+```
+
+The stream sends `sources`, zero or more `text` events, `done`, and a final
+`[DONE]` frame. Errors before streaming starts remain JSON HTTP errors; errors
+after the SSE response starts are returned as a sanitized `error` event,
+followed by `done` and `[DONE]`.
 
 ## Correlate a request with its trace
 
@@ -148,6 +180,13 @@ The chat API probe reads `APP_API_KEY` from `server/.env`. Set
 `CHAT_API_KEY` to use a different key, or `CHAT_API_BASE_URL` to use a
 different local address. The test restricts the target to `localhost`,
 `127.0.0.1`, or `::1`.
+
+To validate a server started with `LLM_STREAMING_ENABLED=true`, also set:
+
+```powershell
+$env:CHAT_API_EXPECT_STREAMING = 'true'
+npm --workspace=server run test:chat-api-live
+```
 
 Both live probes make provider requests and can consume quota. They are
 disabled by default.

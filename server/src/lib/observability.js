@@ -306,76 +306,7 @@ function logStage(stage, outcome, duration, error) {
   log(outcome === 'success' ? 'info' : levelForOutcome(outcome), fields);
 }
 
-/**
- * Starts a span and emits one safe completion/failure log. Callers may only put
- * approved numeric/count/allowlisted values in attributes and summary.
- */
-export async function instrumentStage(config, work) {
-  const started = nowMs();
-  const summary = { ...config.attributes };
-  const initialContext = context.active();
-
-  return tracer.startActiveSpan(
-    config.name,
-    { kind: config.kind || SpanKind.INTERNAL, attributes: removeUndefined(summary) },
-    initialContext,
-    async (span) => {
-      const stage = {
-        span,
-        summary,
-        outcome: 'success',
-        setAttribute(name, value) {
-          if (value !== undefined) {
-            summary[name] = value;
-            span.setAttribute(name, value);
-          }
-        },
-        setAttributes(values) {
-          Object.entries(values).forEach(([name, value]) => this.setAttribute(name, value));
-        },
-        setOutcome(outcome) {
-          this.outcome = outcome;
-        },
-      };
-
-      try {
-        const result = await work(stage);
-        const duration = durationMs(started);
-        setSpanAttributes(span, summary);
-        if (stage.outcome === 'cancelled') {
-          span.setAttribute('rag.cancelled', true);
-        }
-        logStage({ ...config, summary }, stage.outcome, duration);
-        config.onComplete?.({ outcome: stage.outcome, duration, summary });
-        return result;
-      } catch (error) {
-        const info = errorInfo(error, config.errorCode);
-        const outcome = outcomeForError(error, config.errorCode);
-        const duration = durationMs(started);
-        setSpanAttributes(span, summary);
-
-        if (outcome === 'cancelled') {
-          span.setAttribute('rag.cancelled', true);
-        } else {
-          span.setAttribute('error.type', info.type);
-          span.setStatus({ code: SpanStatusCode.ERROR });
-        }
-
-        logStage({ ...config, summary }, outcome, duration, info);
-        config.onComplete?.({ outcome, duration, summary, error: info });
-        throw error;
-      } finally {
-        span.end();
-      }
-    }
-  );
-}
-
-/**
- * Creates a long-lived stage for aggregate operations such as SSE text delivery.
- * It intentionally avoids creating a span for each stream delta.
- */
-export function startStage(config) {
+function createStage(config) {
   const started = nowMs();
   const summary = { ...config.attributes };
   const parentContext = context.active();
@@ -385,62 +316,111 @@ export function startStage(config) {
     parentContext
   );
   const stageContext = trace.setSpan(parentContext, span);
-  let ended = false;
 
-  const stage = {
-    span,
+  return {
+    config,
+    started,
     summary,
+    span,
     context: stageContext,
     outcome: 'success',
+    ended: false,
+  };
+}
+
+function finishStage(stage, error) {
+  if (stage.ended) return;
+  stage.ended = true;
+
+  const { config, span, summary } = stage;
+  const duration = durationMs(stage.started);
+  const failed = error !== undefined;
+  const info = failed ? errorInfo(error, config.errorCode) : undefined;
+  const outcome = failed ? outcomeForError(error, config.errorCode) : stage.outcome;
+  setSpanAttributes(span, summary);
+
+  if (outcome === 'cancelled') {
+    span.setAttribute('rag.cancelled', true);
+  } else if (failed) {
+    span.setAttribute('error.type', info.type);
+    span.setStatus({ code: SpanStatusCode.ERROR });
+  }
+
+  try {
+    context.with(stage.context, () => {
+      logStage({ ...config, summary }, outcome, duration, info);
+      config.onComplete?.({
+        outcome,
+        duration,
+        summary,
+        ...(failed ? { error: info } : {}),
+      });
+    });
+  } finally {
+    span.end();
+  }
+}
+
+function stageApi(stage) {
+  return {
+    get span() {
+      return stage.span;
+    },
+    get summary() {
+      return stage.summary;
+    },
+    get context() {
+      return stage.context;
+    },
+    get outcome() {
+      return stage.outcome;
+    },
     setAttribute(name, value) {
       if (value !== undefined) {
-        summary[name] = value;
-        span.setAttribute(name, value);
+        stage.summary[name] = value;
+        stage.span.setAttribute(name, value);
       }
     },
     setAttributes(values) {
       Object.entries(values).forEach(([name, value]) => this.setAttribute(name, value));
     },
     setOutcome(outcome) {
-      this.outcome = outcome;
+      stage.outcome = outcome;
     },
     run(callback) {
-      return context.with(stageContext, callback);
+      return context.with(stage.context, callback);
     },
     complete() {
-      if (ended) return;
-      ended = true;
-      const duration = durationMs(started);
-      setSpanAttributes(span, summary);
-      if (stage.outcome === 'cancelled') span.setAttribute('rag.cancelled', true);
-      context.with(stageContext, () => {
-        logStage({ ...config, summary }, stage.outcome, duration);
-      });
-      config.onComplete?.({ outcome: stage.outcome, duration, summary });
-      span.end();
+      finishStage(stage);
     },
     fail(error) {
-      if (ended) return;
-      ended = true;
-      const info = errorInfo(error, config.errorCode);
-      const outcome = outcomeForError(error, config.errorCode);
-      const duration = durationMs(started);
-      setSpanAttributes(span, summary);
-      if (outcome === 'cancelled') {
-        span.setAttribute('rag.cancelled', true);
-      } else {
-        span.setAttribute('error.type', info.type);
-        span.setStatus({ code: SpanStatusCode.ERROR });
-      }
-      context.with(stageContext, () => {
-        logStage({ ...config, summary }, outcome, duration, info);
-      });
-      config.onComplete?.({ outcome, duration, summary, error: info });
-      span.end();
+      finishStage(stage, error);
     },
   };
+}
 
-  return stage;
+/**
+ * Runs a bounded stage and automatically completes or fails it. Callers may
+ * only put approved numeric/count/allowlisted values in attributes and summary.
+ */
+export async function instrumentStage(config, work) {
+  const stage = startStage(config);
+  try {
+    const result = await stage.run(() => work(stage));
+    stage.complete();
+    return result;
+  } catch (error) {
+    stage.fail(error);
+    throw error;
+  }
+}
+
+/**
+ * Creates a long-lived stage for aggregate operations such as SSE text delivery.
+ * It intentionally avoids creating a span for each stream delta.
+ */
+export function startStage(config) {
+  return stageApi(createStage(config));
 }
 
 export function annotateRoute(req, route) {
